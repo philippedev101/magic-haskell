@@ -1,0 +1,5 @@
+# Default development snapshot (GHC 9.10.3).
+snapshot: lts-24.45
+
+packages:
+- .

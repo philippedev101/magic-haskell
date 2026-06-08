@@ -6,18 +6,19 @@ This code is under a 3-clause BSD license; see COPYING for details.
 -}
 
 {- |
-   Module     : Magic.Init
+   Module     : Magic.Operations
    Copyright  : Copyright (C) 2005 John Goerzen
-   License    : BSD
+   License    : BSD-3-Clause
 
-   Maintainer : John Goerzen,
-   Maintainer : jgoerzen\@complete.org
+   Maintainer : Philippe <philippedev101\@gmail.com>
    Stability  : provisional
    Portability: portable
 
-Initialization and shutdown for magic programs
+Querying the type of files and in-memory data, and other operations on a magic
+handle. The handle must first be created with @magicOpen@ and populated with
+@magicLoadDefault@ or @magicLoad@ (see "Magic.Init").
 
-Written by John Goerzen, jgoerzen\@complete.org
+Written by John Goerzen.
 -}
 
 module Magic.Operations(-- * Guessing the type
@@ -32,13 +33,12 @@ import Foreign.C.String
 import Magic.Types
 import Foreign.C.Types
 import Data.Word
-import Foreign.C.String
-import Foreign.C.Error
 import Magic.Utils
 import Magic.TypesLL
-import Foreign.Marshal.Utils
 
-{- | Calls the Magic system on the specified file. -}
+{- | Identify the file at the given path. The result is in the form selected by
+the handle's flags (a textual description, a MIME type, an encoding, and so on;
+see 'MagicFlag'). Raises an 'IOError' if the file cannot be examined. -}
 magicFile :: Magic -> FilePath -> IO String
 magicFile magic fp =
     withMagicPtr magic (\cmagic ->
@@ -48,7 +48,8 @@ magicFile magic fp =
                     )
                        )
 
-{- | Calls the Magic system on stdin. -}
+{- | Identify the data available on standard input, as 'magicFile' does for a
+named file. Raises an 'IOError' if the data cannot be examined. -}
 magicStdin :: Magic -> IO String
 magicStdin magic =
     withMagicPtr magic (\cmagic ->
@@ -56,13 +57,20 @@ magicStdin magic =
         peekCString res
                        )
 
-{- | Calls the Magic system to process the given String.  Please note:
-it is not evaluated lazily. -}
+{- | Identify the contents of the given 'String'. Note that the string is
+processed strictly, not lazily.
+
+This is convenient for textual data. For binary data prefer 'magicCString' (or
+write it to a file and use 'magicFile'): marshalling through 'String' goes via
+the current locale encoding, which can corrupt non-textual bytes. Raises an
+'IOError' if the data cannot be examined. -}
 magicString :: Magic -> String -> IO String
 magicString m s = withCStringLen s (magicCString m)
 
-{- | Lower-level function used to call the Magic system to process a C 
-string. -}
+{- | Identify the contents of a C string buffer (a pointer and a length). This
+is the lower-level primitive behind 'magicString', and the right choice for raw
+binary data since it does no encoding conversion. Raises an 'IOError' if the
+data cannot be examined. -}
 magicCString :: Magic -> CStringLen -> IO String
 magicCString magic (cstr, len) =
     withMagicPtr magic (\cmagic ->
@@ -70,14 +78,17 @@ magicCString magic (cstr, len) =
         peekCString res
                     )
 
-{- | Change the flags on an already-created object. -}
+{- | Change the flags (see 'MagicFlag') on an existing handle, for example to
+switch between textual descriptions and MIME types. Raises an 'IOError' on
+failure. -}
 magicSetFlags :: Magic -> [MagicFlag] -> IO ()
 magicSetFlags m mfl = withMagicPtr m (\cmagic ->
      checkIntError "magicSetFlags" m $ magic_setflags cmagic flags)
     where flags = flaglist2int mfl
 
-{- | Compile the colon-separated list of database file(s).  The compiled files
-created have .mgc added to the names of the argument.
+{- | Compile the given colon-separated magic database file(s) into the binary
+@.mgc@ form. Each compiled file is named after its source with @.mgc@ appended.
+Pass 'Nothing' to compile the default database. Raises an 'IOError' on failure.
 -}
 magicCompile :: Magic           -- ^ Object to use
              -> Maybe String    -- ^ Colon separated list of databases, or Nothing for default

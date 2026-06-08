@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ghc: "9.6.7"
+            stack-yaml: stack-ghc-9.6.yaml
+          - ghc: "9.8.4"
+            stack-yaml: stack-ghc-9.8.yaml
+          - ghc: "9.10.3"
+            stack-yaml: stack-ghc-9.10.yaml
+          - ghc: "9.12.4"
+            stack-yaml: stack-ghc-9.12.yaml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmagic-dev pkg-config
+
+      - name: Install Stack
+        run: curl -sSL https://get.haskellstack.org/ | sh -s - -f
+
+      - name: Cache Stack dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.stack
+            .stack-work
+          key: stack-${{ matrix.ghc }}-${{ hashFiles(matrix.stack-yaml) }}
+          restore-keys: stack-${{ matrix.ghc }}-
+
+      - name: Build (GHC ${{ matrix.ghc }})
+        run: stack build --stack-yaml ${{ matrix.stack-yaml }} --no-system-ghc --test --no-run-tests
+
+      - name: Test (GHC ${{ matrix.ghc }})
+        run: stack test --stack-yaml ${{ matrix.stack-yaml }} --no-system-ghc
+
+  # Strict gate: build + test with the `dev` flag, which turns on -Werror.
+  # Pinned to the latest GHC because -Weverything's warning set is
+  # version-specific; the portability matrix above stays warnings-only.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmagic-dev pkg-config
+
+      - name: Install Stack
+        run: curl -sSL https://get.haskellstack.org/ | sh -s - -f
+
+      - name: Build + test with -Werror (flag dev)
+        run: |
+          stack test --stack-yaml stack-ghc-9.12.yaml --no-system-ghc \
+            --flag magic:dev
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libmagic-dev pkg-config
+
+      - name: Install Stack
+        run: curl -sSL https://get.haskellstack.org/ | sh -s - -f
+
+      - name: Check sdist
+        run: stack sdist --no-system-ghc

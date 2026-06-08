@@ -27,12 +27,9 @@ where
 import Foreign
 import Foreign.C.Error
 import Foreign.C.String
-import Foreign.ForeignPtr
 import Magic.TypesLL
 import Magic.Types
-import Data.Bits
 import Foreign.C.Types
-import Magic.Data
 
 flaglist2int :: [MagicFlag] -> CInt
 flaglist2int mfl =

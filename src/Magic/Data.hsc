@@ -2,16 +2,14 @@
 {- |
    Module     : Magic.Data
    Copyright  : Copyright (C) 2005 John Goerzen
-   License    : BSD
+   License    : BSD-3-Clause
 
-   Maintainer : John Goerzen,
-   Maintainer : jgoerzen\@complete.org
+   Maintainer : Philippe <philippedev101\@gmail.com>
    Stability  : provisional
    Portability: portable
 
-Haskell types for libmagic constants
-
-Written by John Goerzen, jgoerzen\@complete.org
+The 'MagicFlag' enumeration, mapping the C @libmagic@ @MAGIC_*@ constants
+to Haskell.
 -}
 
 module Magic.Data (module Magic.Data) where
@@ -19,23 +17,40 @@ module Magic.Data (module Magic.Data) where
 #include "magic.h"
 
 
-data MagicFlag =
-   MagicNone
- | MagicDebug
- | MagicSymlink
- | MagicCompress
- | MagicDevices
- | MagicMimeType
- | MagicMimeEncoding
- | MagicMime
- | MagicContinue
- | MagicCheck
- | MagicPreserveAtime
- | MagicRaw
- | MagicError
- | UnknownMagicFlag Int
-
- deriving (Show)
+-- | Flags that control how @libmagic@ examines a file and what it
+-- reports. Combine them in the list passed to @magicOpen@ or
+-- @magicSetFlags@.
+data MagicFlag
+    = -- | No special handling; return a textual description (the default).
+      MagicNone
+    | -- | Print debugging messages to stderr.
+      MagicDebug
+    | -- | Follow symbolic links.
+      MagicSymlink
+    | -- | Look inside compressed files.
+      MagicCompress
+    | -- | Look at the contents of block or character special devices.
+      MagicDevices
+    | -- | Return a MIME type string instead of a textual description.
+      MagicMimeType
+    | -- | Return the MIME encoding (character set) instead of a textual description.
+      MagicMimeEncoding
+    | -- | Return both the MIME type and the encoding.
+      MagicMime
+    | -- | Return all matches, not just the first.
+      MagicContinue
+    | -- | Check the magic database for consistency and report problems.
+      MagicCheck
+    | -- | Preserve the access time of examined files.
+      MagicPreserveAtime
+    | -- | Do not translate unprintable characters to octal escapes.
+      MagicRaw
+    | -- | Treat errors while examining a file as real errors instead of embedding them in the result.
+      MagicError
+    | -- | A flag value returned by libmagic that these bindings do not
+      --   recognise, carrying its raw integer value.
+      UnknownMagicFlag Int
+  deriving (Show)
 
 instance Enum MagicFlag where
  toEnum (#{const MAGIC_NONE}) = MagicNone

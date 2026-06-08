@@ -1,0 +1,16 @@
+{- arch-tag: Test runner
+Copyright (C) 2005 John Goerzen <jgoerzen@complete.org>
+-}
+
+module Main (main) where
+
+import Control.Monad (when)
+import System.Exit (exitFailure)
+import Test.HUnit
+
+import Tests
+
+main :: IO ()
+main = do
+    cs <- runTestTT tests
+    when (errors cs > 0 || failures cs > 0) exitFailure

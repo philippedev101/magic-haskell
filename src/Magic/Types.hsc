@@ -8,35 +8,32 @@ This code is under a 3-clause BSD license; see COPYING for details.
 {- |
    Module     : Magic.Types
    Copyright  : Copyright (C) 2005 John Goerzen
-   License    : BSD
+   License    : BSD-3-Clause
 
-   Maintainer : John Goerzen,
-   Maintainer : jgoerzen\@complete.org
+   Maintainer : Philippe <philippedev101\@gmail.com>
    Stability  : provisional
    Portability: portable
 
-Types for magic programs.
+The core types of the binding: the opaque 'Magic' handle and the 'MagicFlag'
+enumeration (re-exported from "Magic.Data").
 
-Written by John Goerzen, jgoerzen\@complete.org
+Written by John Goerzen.
 -}
 
 module Magic.Types(Magic,
                    MagicFlag(..))
 where
-import Foreign.Ptr
-import Data.Word
-import Data.Int
-import Foreign.C.Types
 import Foreign.ForeignPtr
 import Magic.Data
 import Magic.TypesLL
 
 #include <magic.h>
 
-{- | Main Magic object type.
+{- | The magic handle: an opaque cookie obtained from @magicOpen@ and passed to
+the loading and querying functions.
 
-Magic objects are automatically closed (and memory freed) when they are
-garbage-collected by Haskell.  There is no need to explicitly close them.
+Handles are closed (and their memory freed) automatically when they are
+garbage-collected by Haskell. There is no need to close them explicitly.
 -}
 type Magic = ForeignPtr CMagic
 
