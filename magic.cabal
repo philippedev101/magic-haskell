@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               magic
-version:            1.1.2
+version:            2.0.0
 synopsis:           Interface to C file/magic library
 description:
   This package provides a Haskell interface to the C libmagic library.
@@ -82,9 +82,10 @@ library
     Magic.Types
     Magic.Init
     Magic.Operations
+    Magic.FilePath
 
   other-modules:
-    Magic.Utils
+    Magic.Internal
 
   default-extensions:
     EmptyDataDecls
@@ -92,8 +93,17 @@ library
     TypeSynonymInstances
 
   build-depends:
-    , base        >=4.9  && <5
-    , bytestring  >=0.10 && <0.13
+    , base        >=4.9     && <5
+    , bytestring  >=0.10    && <0.13
+    , deepseq     >=1.4     && <1.6
+    , filepath    >=1.4.100 && <1.6
+    , text        >=1.2.3   && <2.2
+
+  -- The OsString internal types (used to marshal OsPath to a C string without a
+  -- lossy locale round-trip) live in os-string on GHC >= 9.10; on 9.6/9.8 they
+  -- are provided by filepath itself.
+  if impl(ghc >= 9.10)
+    build-depends: os-string >=2.0 && <2.1
 
   if flag(pkgconfig)
     pkgconfig-depends: libmagic
@@ -105,6 +115,7 @@ test-suite magic-test
   type:             exitcode-stdio-1.0
   main-is:          runtests.hs
   hs-source-dirs:   test
+  ghc-options:      -threaded -with-rtsopts=-N
   other-modules:
     Inittest
     Tests
@@ -113,8 +124,10 @@ test-suite magic-test
   build-depends:
     , base        >=4.9  && <5
     , bytestring  >=0.10 && <0.13
-    , directory   >=1.2  && <1.4
-    , filepath    >=1.4  && <1.6
-    , HUnit       >=1.6  && <1.7
+    , deepseq     >=1.4     && <1.6
+    , directory   >=1.2     && <1.4
+    , filepath    >=1.4.100 && <1.6
+    , HUnit       >=1.6   && <1.7
     , magic
-    , unix        >=2.8  && <2.9
+    , text        >=1.2.3 && <2.2
+    , unix        >=2.8   && <2.9

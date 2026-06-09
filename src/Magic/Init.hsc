@@ -26,35 +26,41 @@ where
 
 import Foreign.Ptr
 import Foreign.C.String
-import Magic.Types
+import Magic.Internal (Magic, CMagic, fromMagicPtr, withMagicPtr, checkIntError, withSearchPathCString)
+import Magic.Data (MagicFlags(..))
 import Foreign.C.Types
-import Magic.Utils
+import System.OsPath (OsPath)
 
-{- | Create a new magic handle configured with the given flags (see
-'MagicFlag'). Before querying anything you must load a database with
-'magicLoadDefault' or 'magicLoad'.
+{- | Create a new magic handle configured with the given flags. Combine flags
+with @('<>')@ (see t'MagicFlags'), or pass 'mempty' for the defaults. Before
+querying anything you must load a database with 'magicLoadDefault' or
+'magicLoad'.
 
 The handle is freed automatically when it is garbage-collected. Raises an
 'IOError' if the handle cannot be created.
 -}
-magicOpen :: [MagicFlag] -> IO Magic
-magicOpen mfl =
+magicOpen :: MagicFlags -> IO Magic
+magicOpen (MagicFlags flags) =
     fromMagicPtr "magicOpen" (magic_open flags)
-    where flags = flaglist2int mfl
 
-{- | Load the system's default magic database into the handle. Raises an
-'IOError' if the database cannot be loaded. -}
+{- | Load the system's default magic database into the handle. Raises a
+@MagicException@ if the database cannot be loaded. -}
 magicLoadDefault :: Magic -> IO ()
 magicLoadDefault m = withMagicPtr m (\cmagic ->
     checkIntError "magicLoadDefault" m $ magic_load cmagic nullPtr)
 
-{- | Load the given magic database(s) into the handle. The argument may be a
-single path or several colon-separated paths. Raises an 'IOError' if a database
-cannot be loaded. -}
-magicLoad :: Magic -> String -> IO ()
-magicLoad m s = withMagicPtr m (\cmagic ->
-    withCString s (\cs ->
-     checkIntError "magicLoad" m $ magic_load cmagic cs))
+{- | Load the given magic database(s) into the handle. Pass the empty list to
+load the system default (equivalent to 'magicLoadDefault'). Raises a
+@MagicException@ if a database cannot be loaded.
+
+(libmagic joins the list with the platform search-path separator, so a path
+that itself contains that separator cannot be represented.) -}
+magicLoad :: Magic -> [OsPath] -> IO ()
+magicLoad m ps = withMagicPtr m (\cmagic ->
+    case ps of
+      [] -> checkIntError "magicLoad" m $ magic_load cmagic nullPtr
+      _  -> withSearchPathCString ps (\cs ->
+             checkIntError "magicLoad" m $ magic_load cmagic cs))
     
 -- Allocates the cookie, no file I/O -> unsafe
 foreign import ccall unsafe "magic.h magic_open"

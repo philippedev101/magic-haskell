@@ -23,137 +23,136 @@ Written by John Goerzen.
 
 module Magic.Operations(-- * Guessing the type
                         magicFile, magicStdin, magicDescriptor,
-                        magicString, magicCString, magicByteString,
+                        magicCString, magicByteString,
                         -- * Flags
                         magicSetFlags, magicGetFlags,
                         -- * Tunable parameters
                         magicGetParam, magicSetParam,
                         -- * Magic databases
-                        magicCompile, magicCheck, magicGetPath,
+                        magicCompile, magicCheck, magicLoadBuffers,
+                        magicGetPath,
                         -- * Library information
                         magicVersion, magicErrno)
 where
 
+import Control.Concurrent.MVar (modifyMVar_)
+import Control.Exception (throwIO)
+import qualified Data.Text as T
+import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Marshal.Alloc (alloca)
+import Foreign.Marshal.Array (withArray)
 import Foreign.Marshal.Utils (with)
 import Foreign.Storable (peek)
 import Data.Word
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Unsafe as BSU
+import Data.Text (Text)
+import System.OsPath (OsPath)
 import System.Posix.Types (Fd)
-import Magic.Types
-import Magic.Utils
+import Magic.Types (MagicParam(..))
+import Magic.Data (MagicFlags(..))
+import Magic.Internal (Magic(..), CMagic, MagicException(..), withMagicPtr, throwErrorIfNull, checkIntError, peekCStringText, withOsPathCString, withSearchPathCString, peekSearchPath)
 
 #include <magic.h>
 
 {- | Identify the file at the given path. The result is in the form selected by
 the handle's flags (a textual description, a MIME type, an encoding, and so on;
-see 'MagicFlag'). Raises an 'IOError' if the file cannot be examined. -}
-magicFile :: Magic -> FilePath -> IO String
+see t'MagicFlags'). Raises a @MagicException@ if the file cannot be
+examined. -}
+magicFile :: Magic -> OsPath -> IO Text
 magicFile magic fp =
     withMagicPtr magic (\cmagic ->
-    withCString fp (\cfp ->
+    withOsPathCString fp (\cfp ->
      do res <- throwErrorIfNull "magicFile" magic (magic_file cmagic cfp)
-        peekCString res
+        peekCStringText res
                     )
                        )
 
 {- | Identify the data available on standard input, as 'magicFile' does for a
-named file. Raises an 'IOError' if the data cannot be examined. -}
-magicStdin :: Magic -> IO String
+named file. Raises a @MagicException@ if the data cannot be
+examined. -}
+magicStdin :: Magic -> IO Text
 magicStdin magic =
     withMagicPtr magic (\cmagic ->
      do res <- throwErrorIfNull "magicStdin" magic (magic_file cmagic nullPtr)
-        peekCString res
+        peekCStringText res
                        )
 
-{- | Identify the contents of the given 'String'. Note that the string is
-processed strictly, not lazily.
-
-This is convenient for textual data. For binary data prefer 'magicCString' (or
-write it to a file and use 'magicFile'): marshalling through 'String' goes via
-the current locale encoding, which can corrupt non-textual bytes. Raises an
-'IOError' if the data cannot be examined. -}
-magicString :: Magic -> String -> IO String
-magicString m s = withCStringLen s (magicCString m)
-
-{- | Identify the contents of a C string buffer (a pointer and a length). This
-is the lower-level primitive behind 'magicString', and the right choice for raw
-binary data since it does no encoding conversion. Raises an 'IOError' if the
-data cannot be examined. -}
-magicCString :: Magic -> CStringLen -> IO String
+{- | Identify the contents of a C string buffer (a pointer and a length). The
+lowest-level in-memory primitive; for ordinary use prefer 'magicByteString'.
+Raises a @MagicException@ if the data cannot be examined. -}
+magicCString :: Magic -> CStringLen -> IO Text
 magicCString magic (cstr, len) =
     withMagicPtr magic (\cmagic ->
      do res <- throwErrorIfNull "magicCString" magic (magic_buffer cmagic cstr (fromIntegral len))
-        peekCString res
+        peekCStringText res
                     )
 
-{- | Change the flags (see 'MagicFlag') on an existing handle, for example to
-switch between textual descriptions and MIME types. Raises an 'IOError' on
+{- | Change the flags (see t'MagicFlags') on an existing handle, for example to
+switch between textual descriptions and MIME types. Raises a @MagicException@ on
 failure. -}
-magicSetFlags :: Magic -> [MagicFlag] -> IO ()
-magicSetFlags m mfl = withMagicPtr m (\cmagic ->
+magicSetFlags :: Magic -> MagicFlags -> IO ()
+magicSetFlags m (MagicFlags flags) = withMagicPtr m (\cmagic ->
      checkIntError "magicSetFlags" m $ magic_setflags cmagic flags)
-    where flags = flaglist2int mfl
 
-{- | Compile the given colon-separated magic database file(s) into the binary
-@.mgc@ form. Each compiled file is named after its source with @.mgc@ appended.
-Pass 'Nothing' to compile the default database. Raises an 'IOError' on failure.
+{- | Compile the given magic database file(s) into the binary @.mgc@ form. Each
+compiled file is named after its source with @.mgc@ appended. Pass the empty
+list to compile the default database. Raises a @MagicException@ on failure.
+
+(libmagic joins the list with the platform search-path separator, so a path
+that itself contains that separator cannot be represented.)
 -}
-magicCompile :: Magic           -- ^ Object to use
-             -> Maybe String    -- ^ Colon separated list of databases, or Nothing for default
-             -> IO ()
-magicCompile m mstr = withMagicPtr m (\cm ->
-     case mstr of
-               Nothing -> worker cm nullPtr
-               Just x -> withCString x (worker cm)
-                                     )
+magicCompile :: Magic -> [OsPath] -> IO ()
+magicCompile m ps = withMagicPtr m (\cm ->
+     case ps of
+       [] -> worker cm nullPtr
+       _  -> withSearchPathCString ps (worker cm))
     where worker cm cs = checkIntError "magicCompile" m $ magic_compile cm cs
 
 {- | Identify the data behind an open file descriptor, as 'magicFile' does for a
 named file. Useful for sockets, pipes, or files you have already opened. Raises
-an 'IOError' if the descriptor cannot be examined.
+a @MagicException@ if the descriptor cannot be examined.
 
 @since 1.1.2
 -}
-magicDescriptor :: Magic -> Fd -> IO String
+magicDescriptor :: Magic -> Fd -> IO Text
 magicDescriptor magic fd =
     withMagicPtr magic (\cmagic ->
      do res <- throwErrorIfNull "magicDescriptor" magic
                  (magic_descriptor cmagic (fromIntegral fd))
-        peekCString res)
+        peekCStringText res)
 
-{- | Identify the contents of a strict 'ByteString'. Unlike 'magicString' this
-does no encoding conversion, so it is the right choice for binary data. Raises
-an 'IOError' if the data cannot be examined.
+{- | Identify the contents of a strict 'ByteString'. Does no encoding
+conversion, so it is the right way to examine in-memory data. Raises a
+@MagicException@ if the data cannot be examined.
 
 @since 1.1.2
 -}
-magicByteString :: Magic -> ByteString -> IO String
+magicByteString :: Magic -> ByteString -> IO Text
 magicByteString magic bs =
     withMagicPtr magic (\cmagic ->
      BSU.unsafeUseAsCStringLen bs (\(cstr, len) ->
       do res <- throwErrorIfNull "magicByteString" magic
                   (magic_buffer cmagic cstr (fromIntegral len))
-         peekCString res))
+         peekCStringText res))
 
-{- | Read the flags currently set on the handle (see 'magicSetFlags'). Composite
-masks are returned decomposed into their individual flags. Raises an 'IOError'
-if the running @libmagic@ does not support querying flags.
+{- | Read the flags currently set on the handle (see 'magicSetFlags'). Test the
+result with @hasFlag@. Raises a @MagicException@ if the running @libmagic@ does not
+support querying flags.
 
 @since 1.1.2
 -}
-magicGetFlags :: Magic -> IO [MagicFlag]
+magicGetFlags :: Magic -> IO MagicFlags
 magicGetFlags m =
     withMagicPtr m (\cmagic ->
      do fl <- magic_getflags cmagic
         if fl < 0
-           then ioError (userError
-                  "magicGetFlags: magic_getflags is unsupported by this libmagic")
-           else return (int2flaglist fl))
+           then throwIO (MagicException (T.pack "magicGetFlags")
+                  (T.pack "magic_getflags is unsupported by this libmagic"))
+           else return (MagicFlags fl))
 
 {- | Read a tunable parameter (see 'MagicParam').
 
@@ -169,7 +168,7 @@ magicGetParam m p =
          return (fromIntegral (v :: CSize))))
 
 {- | Set a tunable parameter (see 'MagicParam'), for example to cap the number
-of bytes scanned in untrusted input. Raises an 'IOError' on failure.
+of bytes scanned in untrusted input. Raises a @MagicException@ on failure.
 
 @since 1.1.2
 -}
@@ -193,27 +192,58 @@ paramToCInt p = case p of
     MagicParamElfShsizeMax -> #{const MAGIC_PARAM_ELF_SHSIZE_MAX}
 
 {- | Check the validity of the given magic database file(s) without compiling
-them, as @file -c@ does. Pass 'Nothing' for the default database. Returns
-'True' if the database is valid.
+them, as @file -c@ does. Pass the empty list for the default database. Returns
+'True' if the database is valid. (libmagic joins the list with the platform
+search-path separator, so a path that itself contains that separator cannot be
+represented.)
 
 @since 1.1.2
 -}
-magicCheck :: Magic -> Maybe FilePath -> IO Bool
-magicCheck m mpath =
+magicCheck :: Magic -> [OsPath] -> IO Bool
+magicCheck m ps =
     withMagicPtr m (\cmagic ->
-     case mpath of
-       Nothing -> fmap (== 0) (magic_check cmagic nullPtr)
-       Just p  -> withCString p (fmap (== 0) . magic_check cmagic))
+     case ps of
+       [] -> fmap (== 0) (magic_check cmagic nullPtr)
+       _  -> withSearchPathCString ps (fmap (== 0) . magic_check cmagic))
 
-{- | The path of the default magic database, honouring the @MAGIC@ environment
-variable.
+{- | Load magic from one or more in-memory compiled databases (the @.mgc@ binary
+form produced by 'magicCompile'), rather than from files. This lets a program
+embed its magic database.
+
+@libmagic@ keeps (does not copy) the supplied buffers for the lifetime of the
+handle, so the handle retains references to the given 'ByteString's to keep
+their memory alive until it is closed. Raises a @MagicException@ on failure.
+
+@since 2.0.0
+-}
+magicLoadBuffers :: Magic -> [ByteString] -> IO ()
+magicLoadBuffers (Magic fp mv) bufs =
+    modifyMVar_ mv $ \retained ->
+     do withForeignPtr fp $ \cmagic ->
+          withBuffers bufs $ \pls ->
+            withArray (map fst pls) $ \pptr ->
+            withArray (map snd pls) $ \sptr ->
+              checkIntError "magicLoadBuffers" (Magic fp mv)
+                (magic_load_buffers cmagic pptr sptr (fromIntegral (length bufs)))
+        -- Keep the buffers reachable (and so, being pinned, validly addressable)
+        -- for as long as the handle lives.
+        return (bufs ++ retained)
+  where
+    withBuffers :: [ByteString] -> ([(Ptr Word8, CSize)] -> IO a) -> IO a
+    withBuffers []     k = k []
+    withBuffers (b:bs) k =
+        BSU.unsafeUseAsCStringLen b (\(p, l) ->
+          withBuffers bs (\rest -> k ((castPtr p, fromIntegral l) : rest)))
+
+{- | The default magic database search path, honouring the @MAGIC@ environment
+variable, as a list of paths.
 
 @since 1.1.2
 -}
-magicGetPath :: IO FilePath
+magicGetPath :: IO [OsPath]
 magicGetPath =
     do res <- magic_getpath nullPtr 0
-       if res == nullPtr then return "" else peekCString res
+       if res == nullPtr then return [] else peekSearchPath res
 
 {- | The version of the @libmagic@ library in use, encoded as a single integer
 (for example @545@ for version 5.45).
@@ -254,6 +284,10 @@ foreign import ccall safe "magic.h magic_descriptor"
 -- Validates a database file -> safe
 foreign import ccall safe "magic.h magic_check"
   magic_check :: Ptr CMagic -> CString -> IO CInt
+
+-- Parses (potentially large) in-memory databases -> safe
+foreign import ccall safe "magic.h magic_load_buffers"
+  magic_load_buffers :: Ptr CMagic -> Ptr (Ptr Word8) -> Ptr CSize -> CSize -> IO CInt
 
 -- Does not do I/O -> unsafe
 foreign import ccall unsafe "magic.h magic_getflags"

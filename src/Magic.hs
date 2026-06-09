@@ -22,28 +22,46 @@ This top-level module re-exports the whole interface: the types in
 "Magic.Types", the initialization functions in "Magic.Init", and the querying
 functions in "Magic.Operations".
 
-A typical session creates a handle, loads the system magic database, then
-queries files or in-memory data. The flags passed to 'magicOpen' (see
-'MagicFlag') choose what kind of answer comes back:
+If you just want to pass ordinary @String@ paths, start with "Magic.FilePath",
+a drop-in facade over this module. The functions here take
+'System.OsPath.OsPath' instead, which represents any filename losslessly and
+independently of the locale (see the note below).
 
+A typical session creates a handle, loads the system magic database, then
+queries files or in-memory data. The flags passed to 'magicOpen' choose what
+kind of answer comes back (see t'MagicFlags'); combine them with @('<>')@ and
+use 'mempty' (i.e. 'MagicNone') for the defaults:
+
+> {-# LANGUAGE QuasiQuotes #-}
 > import Magic
+> import System.OsPath (osp)
+> import qualified Data.Text.IO as T
 >
 > main :: IO ()
 > main = do
->   magic <- magicOpen [MagicMimeType]   -- ask for MIME types
+>   magic <- magicOpen MagicMimeType     -- ask for MIME types
 >   magicLoadDefault magic               -- load the system database
->   mime <- magicFile magic "/etc/passwd"
->   putStrLn mime                        -- e.g. "text/plain"
+>   mime <- magicFile magic [osp|/etc/passwd|]
+>   T.putStrLn mime                      -- e.g. "text/plain"
+
+Paths here are 'System.OsPath.OsPath', which stores the OS-native path bytes
+verbatim and so represents any path the system can, without a lossy locale
+round-trip. The "Magic.FilePath" facade offers the same API with @String@
+paths for convenience; it is fine for ordinary filenames, but cannot faithfully
+represent names whose bytes are invalid in the current locale.
 
 Handles are closed and their memory freed automatically when they are
-garbage-collected (see 'Magic'); there is no explicit close. On failure the
-operations in this library raise an 'IOError'.
+garbage-collected (see t'Magic'); there is no explicit close. On failure, most
+operations raise a t'MagicException'; 'magicOpen' raises an 'IOError' (from
+@errno@) if the handle cannot be allocated.
 
 Originally written by John Goerzen.
 -}
 
 module Magic (-- * Basic Types
              module Magic.Types,
+             -- * Flags
+             module Magic.Data,
              -- * Initialization
              module Magic.Init,
              -- * Operation
@@ -51,5 +69,6 @@ module Magic (-- * Basic Types
             )
 where
 import Magic.Types
+import Magic.Data
 import Magic.Init
 import Magic.Operations

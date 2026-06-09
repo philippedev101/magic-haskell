@@ -5,6 +5,8 @@ Copyright (C) 2005 John Goerzen <jgoerzen@complete.org>
 This code is under a 3-clause BSD license; see COPYING for details.
 -}
 
+{-# LANGUAGE DeriveGeneric #-}
+
 {- |
    Module     : Magic.Types
    Copyright  : Copyright (C) 2005 John Goerzen
@@ -14,42 +16,18 @@ This code is under a 3-clause BSD license; see COPYING for details.
    Stability  : provisional
    Portability: portable
 
-The core types of the binding: the opaque 'Magic' handle, the 'MagicFlag'
-enumeration (re-exported from "Magic.Data") and the 'MagicParam' tunables.
-
-Written by John Goerzen.
+The core types of the binding: the opaque t'Magic' handle, the t'MagicException'
+error type (both defined in "Magic.Internal"), and the 'MagicParam' tunables.
+The flag bit-mask lives in "Magic.Data".
 -}
 
 module Magic.Types(Magic,
-                   CMagic,
-                   MagicFlag(..),
+                   MagicException(..),
                    MagicParam(..))
 where
-import Foreign.ForeignPtr
-import Magic.Data
-
-#include <magic.h>
-
--- | Phantom type standing in for the C @magic_t@ cookie. It appears only as the
--- argument of a 'Foreign.ForeignPtr.ForeignPtr' (the 'Magic' handle) and has no
--- values of its own.
-data CMagic
-
-{- | The magic handle: an opaque cookie obtained from @magicOpen@ and passed to
-the loading and querying functions.
-
-Handles are closed (and their memory freed) automatically when they are
-garbage-collected by Haskell. There is no need to close them explicitly.
-
-__Thread safety.__ A single @Magic@ handle is /not/ safe for concurrent use:
-the underlying @libmagic@ cookie keeps mutable state, so calling operations on
-the same handle from multiple threads at once is a data race. Use one handle
-per thread, or serialise access to a shared handle (e.g. behind an @MVar@).
-Distinct handles are independent and may be used concurrently. Programs doing
-blocking work (loading databases, examining files) should also be built with
-the threaded runtime (@-threaded@).
--}
-type Magic = ForeignPtr CMagic
+import Control.DeepSeq (NFData(rnf))
+import GHC.Generics (Generic)
+import Magic.Internal (Magic, MagicException(..))
 
 {- | Tunable limits that bound how hard @libmagic@ works when examining data,
 read and written with @magicGetParam@ and @magicSetParam@ (see
@@ -78,5 +56,7 @@ data MagicParam
       MagicParamEncodingMax
     | -- | Maximum size of an ELF section processed.
       MagicParamElfShsizeMax
-  deriving (Show, Eq, Ord, Enum, Bounded)
+  deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+
+instance NFData MagicParam where rnf x = x `seq` ()
 
