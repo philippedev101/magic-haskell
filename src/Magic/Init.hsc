@@ -29,7 +29,6 @@ import Foreign.C.String
 import Magic.Types
 import Foreign.C.Types
 import Magic.Utils
-import Magic.TypesLL
 
 {- | Create a new magic handle configured with the given flags (see
 'MagicFlag'). Before querying anything you must load a database with
@@ -57,8 +56,13 @@ magicLoad m s = withMagicPtr m (\cmagic ->
     withCString s (\cs ->
      checkIntError "magicLoad" m $ magic_load cmagic cs))
     
+-- Allocates the cookie, no file I/O -> unsafe
 foreign import ccall unsafe "magic.h magic_open"
   magic_open :: CInt -> IO (Ptr CMagic)
 
-foreign import ccall unsafe "magic.h magic_load"
+-- Reads and parses the (potentially multi-megabyte) magic database from disk:
+-- blocking I/O, so this must be a safe call. A safe call lets other Haskell
+-- threads run during the load and does not stall garbage collection, whereas
+-- an unsafe call would block the capability for the whole load.
+foreign import ccall safe "magic.h magic_load"
   magic_load :: Ptr CMagic -> CString -> IO CInt

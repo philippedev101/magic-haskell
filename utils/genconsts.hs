@@ -46,6 +46,24 @@ flagDocs =
   , ("MAGIC_PRESERVE_ATIME", "Preserve the access time of examined files.")
   , ("MAGIC_RAW",            "Do not translate unprintable characters to octal escapes.")
   , ("MAGIC_ERROR",          "Treat errors while examining a file as real errors instead of embedding them in the result.")
+  , ("MAGIC_APPLE",          "Return the Apple creator and type.")
+  , ("MAGIC_EXTENSION",      "Return a slash-separated list of valid file extensions for the detected type.")
+  , ("MAGIC_COMPRESS_TRANSP","Report on the compressed contents only, without mentioning the compression itself (transparent decompression).")
+  , ("MAGIC_NO_COMPRESS_FORK","Do not allow decompression that requires forking a helper process.")
+  , ("MAGIC_NODESC",         "Composite of 'MagicExtension', 'MagicMime' and 'MagicApple': return identifiers rather than a textual description.")
+  , ("MAGIC_NO_CHECK_COMPRESS","Do not look inside compressed files.")
+  , ("MAGIC_NO_CHECK_TAR",   "Do not examine tar archives.")
+  , ("MAGIC_NO_CHECK_SOFT",  "Do not consult the magic database entries (soft magic).")
+  , ("MAGIC_NO_CHECK_APPTYPE","Do not check for an application type (e.g. EMX).")
+  , ("MAGIC_NO_CHECK_ELF",   "Do not examine ELF details.")
+  , ("MAGIC_NO_CHECK_TEXT",  "Do not examine text files.")
+  , ("MAGIC_NO_CHECK_CDF",   "Do not examine CDF (Microsoft Compound Document) files.")
+  , ("MAGIC_NO_CHECK_CSV",   "Do not examine CSV files.")
+  , ("MAGIC_NO_CHECK_TOKENS","Do not look for known text tokens.")
+  , ("MAGIC_NO_CHECK_ENCODING","Do not check text encodings.")
+  , ("MAGIC_NO_CHECK_JSON",  "Do not examine JSON files.")
+  , ("MAGIC_NO_CHECK_SIMH",  "Do not examine SIMH tape files.")
+  , ("MAGIC_NO_CHECK_BUILTIN","Disable all built-in tests; consult only the magic database.")
   ]
 
 docFor :: String -> String
@@ -97,15 +115,31 @@ modHeader =
  "The 'MagicFlag' enumeration, mapping the C @libmagic@ @MAGIC_*@ constants\n" ++
  "to Haskell.\n" ++
  "-}\n\n" ++
- "module Magic.Data (module Magic.Data) where\n" ++
+ "module Magic.Data (MagicFlag(..)) where\n" ++
  "\n#include \"magic.h\"\n\n"
 
 main =
     do putStrLn modHeader
        putStrLn (errorClause "MagicFlag" magicFlags)
 
+-- NOTE: keep these in sync with <magic.h>. Aliases / zero-valued constants are
+-- intentionally omitted because the Enum instance maps each constructor to a
+-- distinct integer: MAGIC_NO_CHECK_ASCII is a synonym for MAGIC_NO_CHECK_TEXT,
+-- and MAGIC_NO_CHECK_FORTRAN / MAGIC_NO_CHECK_TROFF are deprecated no-ops equal
+-- to 0 (i.e. MAGIC_NONE). Composite flags (MAGIC_MIME, MAGIC_NODESC,
+-- MAGIC_NO_CHECK_BUILTIN) are kept: each has a distinct value.
 magicFlags = ["MAGIC_NONE", "MAGIC_DEBUG", "MAGIC_SYMLINK",
               "MAGIC_COMPRESS", "MAGIC_DEVICES",
               "MAGIC_MIME_TYPE", "MAGIC_MIME_ENCODING", "MAGIC_MIME",
               "MAGIC_CONTINUE", "MAGIC_CHECK",
-              "MAGIC_PRESERVE_ATIME", "MAGIC_RAW", "MAGIC_ERROR"]
+              "MAGIC_PRESERVE_ATIME", "MAGIC_RAW", "MAGIC_ERROR",
+              "MAGIC_APPLE", "MAGIC_EXTENSION",
+              "MAGIC_COMPRESS_TRANSP", "MAGIC_NO_COMPRESS_FORK",
+              "MAGIC_NODESC",
+              "MAGIC_NO_CHECK_COMPRESS", "MAGIC_NO_CHECK_TAR",
+              "MAGIC_NO_CHECK_SOFT", "MAGIC_NO_CHECK_APPTYPE",
+              "MAGIC_NO_CHECK_ELF", "MAGIC_NO_CHECK_TEXT",
+              "MAGIC_NO_CHECK_CDF", "MAGIC_NO_CHECK_CSV",
+              "MAGIC_NO_CHECK_TOKENS", "MAGIC_NO_CHECK_ENCODING",
+              "MAGIC_NO_CHECK_JSON", "MAGIC_NO_CHECK_SIMH",
+              "MAGIC_NO_CHECK_BUILTIN"]

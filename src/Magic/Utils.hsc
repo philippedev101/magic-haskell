@@ -8,32 +8,42 @@ This code is under a 3-clause BSD license; see COPYING for details.
 {- |
    Module     : Magic.Utils
    Copyright  : Copyright (C) 2005 John Goerzen
-   License    : BSD
+   License    : BSD-3-Clause
 
-   Maintainer : John Goerzen,
-   Maintainer : jgoerzen\@complete.org
+   Maintainer : Philippe <philippedev101\@gmail.com>
    Stability  : provisional
    Portability: portable
 
-Utils
+Internal marshalling helpers shared by the other modules: converting between
+'MagicFlag' lists and the C bit-mask, wrapping the C handle in a 'ForeignPtr',
+and turning C error returns into 'IOError's.
 
-Written by John Goerzen, jgoerzen\@complete.org
+Written by John Goerzen.
 -}
 
-module Magic.Utils (flaglist2int, fromMagicPtr, withMagicPtr, checkIntError,
-                    throwErrorIfNull)
+module Magic.Utils (flaglist2int, int2flaglist, fromMagicPtr, withMagicPtr,
+                    checkIntError, throwErrorIfNull)
 where
 
 import Foreign
 import Foreign.C.Error
 import Foreign.C.String
-import Magic.TypesLL
 import Magic.Types
 import Foreign.C.Types
 
 flaglist2int :: [MagicFlag] -> CInt
 flaglist2int mfl =
     foldl (\c f -> c .|. (fromIntegral . fromEnum $ f)) 0 mfl
+
+-- | Decode a C bit-mask into the list of set 'MagicFlag's. Each set bit is
+-- mapped to its individual flag, so composite values come back decomposed
+-- (e.g. the MIME mask yields @['MagicMimeType', 'MagicMimeEncoding']@).
+int2flaglist :: CInt -> [MagicFlag]
+int2flaglist flags =
+    [ toEnum v
+    | i <- [0 .. finiteBitSize flags - 1]
+    , testBit flags i
+    , let v = bit i :: Int ]
 
 fromMagicPtr :: String -> IO (Ptr CMagic) -> IO Magic
 fromMagicPtr caller action =

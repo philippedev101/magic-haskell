@@ -12,7 +12,7 @@ The 'MagicFlag' enumeration, mapping the C @libmagic@ @MAGIC_*@ constants
 to Haskell.
 -}
 
-module Magic.Data (module Magic.Data) where
+module Magic.Data (MagicFlag(..)) where
 
 #include "magic.h"
 
@@ -47,6 +47,42 @@ data MagicFlag
       MagicRaw
     | -- | Treat errors while examining a file as real errors instead of embedding them in the result.
       MagicError
+    | -- | Return the Apple creator and type.
+      MagicApple
+    | -- | Return a slash-separated list of valid file extensions for the detected type.
+      MagicExtension
+    | -- | Report on the compressed contents only, without mentioning the compression itself (transparent decompression).
+      MagicCompressTransp
+    | -- | Do not allow decompression that requires forking a helper process.
+      MagicNoCompressFork
+    | -- | Composite of 'MagicExtension', 'MagicMime' and 'MagicApple': return identifiers rather than a textual description.
+      MagicNodesc
+    | -- | Do not look inside compressed files.
+      MagicNoCheckCompress
+    | -- | Do not examine tar archives.
+      MagicNoCheckTar
+    | -- | Do not consult the magic database entries (soft magic).
+      MagicNoCheckSoft
+    | -- | Do not check for an application type (e.g. EMX).
+      MagicNoCheckApptype
+    | -- | Do not examine ELF details.
+      MagicNoCheckElf
+    | -- | Do not examine text files.
+      MagicNoCheckText
+    | -- | Do not examine CDF (Microsoft Compound Document) files.
+      MagicNoCheckCdf
+    | -- | Do not examine CSV files.
+      MagicNoCheckCsv
+    | -- | Do not look for known text tokens.
+      MagicNoCheckTokens
+    | -- | Do not check text encodings.
+      MagicNoCheckEncoding
+    | -- | Do not examine JSON files.
+      MagicNoCheckJson
+    | -- | Do not examine SIMH tape files.
+      MagicNoCheckSimh
+    | -- | Disable all built-in tests; consult only the magic database.
+      MagicNoCheckBuiltin
     | -- | A flag value returned by libmagic that these bindings do not
       --   recognise, carrying its raw integer value.
       UnknownMagicFlag Int
@@ -66,6 +102,24 @@ instance Enum MagicFlag where
  toEnum (#{const MAGIC_PRESERVE_ATIME}) = MagicPreserveAtime
  toEnum (#{const MAGIC_RAW}) = MagicRaw
  toEnum (#{const MAGIC_ERROR}) = MagicError
+ toEnum (#{const MAGIC_APPLE}) = MagicApple
+ toEnum (#{const MAGIC_EXTENSION}) = MagicExtension
+ toEnum (#{const MAGIC_COMPRESS_TRANSP}) = MagicCompressTransp
+ toEnum (#{const MAGIC_NO_COMPRESS_FORK}) = MagicNoCompressFork
+ toEnum (#{const MAGIC_NODESC}) = MagicNodesc
+ toEnum (#{const MAGIC_NO_CHECK_COMPRESS}) = MagicNoCheckCompress
+ toEnum (#{const MAGIC_NO_CHECK_TAR}) = MagicNoCheckTar
+ toEnum (#{const MAGIC_NO_CHECK_SOFT}) = MagicNoCheckSoft
+ toEnum (#{const MAGIC_NO_CHECK_APPTYPE}) = MagicNoCheckApptype
+ toEnum (#{const MAGIC_NO_CHECK_ELF}) = MagicNoCheckElf
+ toEnum (#{const MAGIC_NO_CHECK_TEXT}) = MagicNoCheckText
+ toEnum (#{const MAGIC_NO_CHECK_CDF}) = MagicNoCheckCdf
+ toEnum (#{const MAGIC_NO_CHECK_CSV}) = MagicNoCheckCsv
+ toEnum (#{const MAGIC_NO_CHECK_TOKENS}) = MagicNoCheckTokens
+ toEnum (#{const MAGIC_NO_CHECK_ENCODING}) = MagicNoCheckEncoding
+ toEnum (#{const MAGIC_NO_CHECK_JSON}) = MagicNoCheckJson
+ toEnum (#{const MAGIC_NO_CHECK_SIMH}) = MagicNoCheckSimh
+ toEnum (#{const MAGIC_NO_CHECK_BUILTIN}) = MagicNoCheckBuiltin
  toEnum x = UnknownMagicFlag x
 
  fromEnum MagicNone = (#{const MAGIC_NONE})
@@ -81,6 +135,24 @@ instance Enum MagicFlag where
  fromEnum MagicPreserveAtime = (#{const MAGIC_PRESERVE_ATIME})
  fromEnum MagicRaw = (#{const MAGIC_RAW})
  fromEnum MagicError = (#{const MAGIC_ERROR})
+ fromEnum MagicApple = (#{const MAGIC_APPLE})
+ fromEnum MagicExtension = (#{const MAGIC_EXTENSION})
+ fromEnum MagicCompressTransp = (#{const MAGIC_COMPRESS_TRANSP})
+ fromEnum MagicNoCompressFork = (#{const MAGIC_NO_COMPRESS_FORK})
+ fromEnum MagicNodesc = (#{const MAGIC_NODESC})
+ fromEnum MagicNoCheckCompress = (#{const MAGIC_NO_CHECK_COMPRESS})
+ fromEnum MagicNoCheckTar = (#{const MAGIC_NO_CHECK_TAR})
+ fromEnum MagicNoCheckSoft = (#{const MAGIC_NO_CHECK_SOFT})
+ fromEnum MagicNoCheckApptype = (#{const MAGIC_NO_CHECK_APPTYPE})
+ fromEnum MagicNoCheckElf = (#{const MAGIC_NO_CHECK_ELF})
+ fromEnum MagicNoCheckText = (#{const MAGIC_NO_CHECK_TEXT})
+ fromEnum MagicNoCheckCdf = (#{const MAGIC_NO_CHECK_CDF})
+ fromEnum MagicNoCheckCsv = (#{const MAGIC_NO_CHECK_CSV})
+ fromEnum MagicNoCheckTokens = (#{const MAGIC_NO_CHECK_TOKENS})
+ fromEnum MagicNoCheckEncoding = (#{const MAGIC_NO_CHECK_ENCODING})
+ fromEnum MagicNoCheckJson = (#{const MAGIC_NO_CHECK_JSON})
+ fromEnum MagicNoCheckSimh = (#{const MAGIC_NO_CHECK_SIMH})
+ fromEnum MagicNoCheckBuiltin = (#{const MAGIC_NO_CHECK_BUILTIN})
  fromEnum (UnknownMagicFlag x) = x
 
 instance Ord MagicFlag where

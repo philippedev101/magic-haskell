@@ -22,19 +22,32 @@ Written by John Goerzen.
 -}
 
 module Magic.Operations(-- * Guessing the type
-                        magicFile, magicStdin,
-                        magicString, magicCString,
-                        -- * Other operations
-                        magicSetFlags, magicCompile)
+                        magicFile, magicStdin, magicDescriptor,
+                        magicString, magicCString, magicByteString,
+                        -- * Flags
+                        magicSetFlags, magicGetFlags,
+                        -- * Tunable parameters
+                        magicGetParam, magicSetParam,
+                        -- * Magic databases
+                        magicCompile, magicCheck, magicGetPath,
+                        -- * Library information
+                        magicVersion, magicErrno)
 where
 
 import Foreign.Ptr
 import Foreign.C.String
-import Magic.Types
 import Foreign.C.Types
+import Foreign.Marshal.Alloc (alloca)
+import Foreign.Marshal.Utils (with)
+import Foreign.Storable (peek)
 import Data.Word
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Unsafe as BSU
+import System.Posix.Types (Fd)
+import Magic.Types
 import Magic.Utils
-import Magic.TypesLL
+
+#include <magic.h>
 
 {- | Identify the file at the given path. The result is in the form selected by
 the handle's flags (a textual description, a MIME type, an encoding, and so on;
@@ -100,6 +113,124 @@ magicCompile m mstr = withMagicPtr m (\cm ->
                                      )
     where worker cm cs = checkIntError "magicCompile" m $ magic_compile cm cs
 
+{- | Identify the data behind an open file descriptor, as 'magicFile' does for a
+named file. Useful for sockets, pipes, or files you have already opened. Raises
+an 'IOError' if the descriptor cannot be examined.
+
+@since 1.1.2
+-}
+magicDescriptor :: Magic -> Fd -> IO String
+magicDescriptor magic fd =
+    withMagicPtr magic (\cmagic ->
+     do res <- throwErrorIfNull "magicDescriptor" magic
+                 (magic_descriptor cmagic (fromIntegral fd))
+        peekCString res)
+
+{- | Identify the contents of a strict 'ByteString'. Unlike 'magicString' this
+does no encoding conversion, so it is the right choice for binary data. Raises
+an 'IOError' if the data cannot be examined.
+
+@since 1.1.2
+-}
+magicByteString :: Magic -> ByteString -> IO String
+magicByteString magic bs =
+    withMagicPtr magic (\cmagic ->
+     BSU.unsafeUseAsCStringLen bs (\(cstr, len) ->
+      do res <- throwErrorIfNull "magicByteString" magic
+                  (magic_buffer cmagic cstr (fromIntegral len))
+         peekCString res))
+
+{- | Read the flags currently set on the handle (see 'magicSetFlags'). Composite
+masks are returned decomposed into their individual flags. Raises an 'IOError'
+if the running @libmagic@ does not support querying flags.
+
+@since 1.1.2
+-}
+magicGetFlags :: Magic -> IO [MagicFlag]
+magicGetFlags m =
+    withMagicPtr m (\cmagic ->
+     do fl <- magic_getflags cmagic
+        if fl < 0
+           then ioError (userError
+                  "magicGetFlags: magic_getflags is unsupported by this libmagic")
+           else return (int2flaglist fl))
+
+{- | Read a tunable parameter (see 'MagicParam').
+
+@since 1.1.2
+-}
+magicGetParam :: Magic -> MagicParam -> IO Int
+magicGetParam m p =
+    withMagicPtr m (\cmagic ->
+     alloca (\ptr ->
+      do checkIntError "magicGetParam" m
+           (magic_getparam cmagic (paramToCInt p) (castPtr ptr))
+         v <- peek ptr
+         return (fromIntegral (v :: CSize))))
+
+{- | Set a tunable parameter (see 'MagicParam'), for example to cap the number
+of bytes scanned in untrusted input. Raises an 'IOError' on failure.
+
+@since 1.1.2
+-}
+magicSetParam :: Magic -> MagicParam -> Int -> IO ()
+magicSetParam m p val =
+    withMagicPtr m (\cmagic ->
+     with (fromIntegral val :: CSize) (\ptr ->
+      checkIntError "magicSetParam" m
+        (magic_setparam cmagic (paramToCInt p) (castPtr ptr))))
+
+paramToCInt :: MagicParam -> CInt
+paramToCInt p = case p of
+    MagicParamIndirMax     -> #{const MAGIC_PARAM_INDIR_MAX}
+    MagicParamNameMax      -> #{const MAGIC_PARAM_NAME_MAX}
+    MagicParamElfPhnumMax  -> #{const MAGIC_PARAM_ELF_PHNUM_MAX}
+    MagicParamElfShnumMax  -> #{const MAGIC_PARAM_ELF_SHNUM_MAX}
+    MagicParamElfNotesMax  -> #{const MAGIC_PARAM_ELF_NOTES_MAX}
+    MagicParamRegexMax     -> #{const MAGIC_PARAM_REGEX_MAX}
+    MagicParamBytesMax     -> #{const MAGIC_PARAM_BYTES_MAX}
+    MagicParamEncodingMax  -> #{const MAGIC_PARAM_ENCODING_MAX}
+    MagicParamElfShsizeMax -> #{const MAGIC_PARAM_ELF_SHSIZE_MAX}
+
+{- | Check the validity of the given magic database file(s) without compiling
+them, as @file -c@ does. Pass 'Nothing' for the default database. Returns
+'True' if the database is valid.
+
+@since 1.1.2
+-}
+magicCheck :: Magic -> Maybe FilePath -> IO Bool
+magicCheck m mpath =
+    withMagicPtr m (\cmagic ->
+     case mpath of
+       Nothing -> fmap (== 0) (magic_check cmagic nullPtr)
+       Just p  -> withCString p (fmap (== 0) . magic_check cmagic))
+
+{- | The path of the default magic database, honouring the @MAGIC@ environment
+variable.
+
+@since 1.1.2
+-}
+magicGetPath :: IO FilePath
+magicGetPath =
+    do res <- magic_getpath nullPtr 0
+       if res == nullPtr then return "" else peekCString res
+
+{- | The version of the @libmagic@ library in use, encoded as a single integer
+(for example @545@ for version 5.45).
+
+@since 1.1.2
+-}
+magicVersion :: IO Int
+magicVersion = fmap fromIntegral magic_version
+
+{- | The @errno@ recorded by the last failing operation on the handle, or @0@ if
+the last failure was not caused by a system error.
+
+@since 1.1.2
+-}
+magicErrno :: Magic -> IO Int
+magicErrno m = withMagicPtr m (fmap fromIntegral . magic_errno)
+
 -- Does file I/O -> safe
 foreign import ccall safe "magic.h magic_file"
   magic_file :: Ptr CMagic -> CString -> IO CString
@@ -115,3 +246,35 @@ foreign import ccall unsafe "magic.h magic_setflags"
 -- Does file I/O -> safe
 foreign import ccall safe "magic.h magic_compile"
   magic_compile :: Ptr CMagic -> CString -> IO CInt
+
+-- Reads the descriptor -> safe
+foreign import ccall safe "magic.h magic_descriptor"
+  magic_descriptor :: Ptr CMagic -> CInt -> IO CString
+
+-- Validates a database file -> safe
+foreign import ccall safe "magic.h magic_check"
+  magic_check :: Ptr CMagic -> CString -> IO CInt
+
+-- Does not do I/O -> unsafe
+foreign import ccall unsafe "magic.h magic_getflags"
+  magic_getflags :: Ptr CMagic -> IO CInt
+
+-- Does not do I/O -> unsafe
+foreign import ccall unsafe "magic.h magic_getparam"
+  magic_getparam :: Ptr CMagic -> CInt -> Ptr () -> IO CInt
+
+-- Does not do I/O -> unsafe
+foreign import ccall unsafe "magic.h magic_setparam"
+  magic_setparam :: Ptr CMagic -> CInt -> Ptr () -> IO CInt
+
+-- Reads an environment variable -> unsafe
+foreign import ccall unsafe "magic.h magic_getpath"
+  magic_getpath :: CString -> CInt -> IO CString
+
+-- Does not do I/O -> unsafe
+foreign import ccall unsafe "magic.h magic_version"
+  magic_version :: IO CInt
+
+-- Does not do I/O -> unsafe
+foreign import ccall unsafe "magic.h magic_errno"
+  magic_errno :: Ptr CMagic -> IO CInt

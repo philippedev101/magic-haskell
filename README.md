@@ -2,7 +2,7 @@
 
 It is a binding to the C [libmagic](https://www.darwinsys.com/file/) library. It allows you to determine the type of a file not by looking at its name or extension, but rather by examining the contents itself.
 
-libmagic can provide either a textual description or a MIME content type (and, occasionally, also a character set). The Haskell binding can also provide reports over Haskell strings.
+libmagic can provide either a textual description or a MIME content type (and, occasionally, also a character set). The Haskell binding can examine files, open file descriptors, and in-memory data (as a `String` or, for binary content, a strict `ByteString`).
 
 ## Requirements
 

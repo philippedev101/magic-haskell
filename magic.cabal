@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               magic
-version:            1.1.1
+version:            1.1.2
 synopsis:           Interface to C file/magic library
 description:
   This package provides a Haskell interface to the C libmagic library.
@@ -85,14 +85,15 @@ library
 
   other-modules:
     Magic.Utils
-    Magic.TypesLL
 
   default-extensions:
     EmptyDataDecls
     ForeignFunctionInterface
     TypeSynonymInstances
 
-  build-depends:    base >=4.9 && <5
+  build-depends:
+    , base        >=4.9  && <5
+    , bytestring  >=0.10 && <0.13
 
   if flag(pkgconfig)
     pkgconfig-depends: libmagic
@@ -116,3 +117,4 @@ test-suite magic-test
     , filepath    >=1.4  && <1.6
     , HUnit       >=1.6  && <1.7
     , magic
+    , unix        >=2.8  && <2.9
